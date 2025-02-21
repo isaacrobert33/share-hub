@@ -3,8 +3,7 @@ const next = require("next");
 const os = require("os");
 const interfaces = os.networkInterfaces();
 
-const dev = process.env.NODE_ENV !== "production";
-const app = next({ dev });
+const app = next({ dev: false });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
@@ -12,7 +11,6 @@ app.prepare().then(() => {
     handle(req, res);
   }).listen(80, (err) => {
     if (err) throw err;
-    console.log("> Ready on http://localhost:3000");
 
     const getLocalIpAddress = () => {
       for (const interfaceName of Object.keys(interfaces)) {

@@ -16,6 +16,9 @@ import {
 import { FileItem } from "@/lib/types";
 import { v4 as UUID } from "uuid";
 import { useQuery } from "@tanstack/react-query";
+import { Checkbox } from "@/components/ui/checkbox";
+import { CheckedState } from "@radix-ui/react-checkbox";
+import { useState } from "react";
 
 const fetchFiles = async (): Promise<FileItem[]> => {
   const response = await fetch("/api/files");
@@ -31,6 +34,7 @@ export default function FilePage() {
   const [files, setFiles] = React.useState<FileItem[]>([]);
   const [isDragging, setIsDragging] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [checkedFiles, setCheckedFiles] = useState<string[]>();
   const { data, refetch, isError } = useQuery({
     queryKey: ["files"],
     queryFn: fetchFiles,
@@ -160,6 +164,50 @@ export default function FilePage() {
     });
   };
 
+  const handleBatchDownload = async () => {
+    const response = await fetch("/api/zips", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filePaths: checkedFiles }),
+    });
+
+    if (response.ok) {
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "files.zip";
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      console.error("Failed to download ZIP:", await response.json());
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    const confirm = window.confirm("Proceed with deleting these files ?");
+    if (!confirm) return;
+
+    await fetch("/api/batch-delete", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filePaths: checkedFiles }),
+    }).then(() => {
+      refetch();
+    });
+  };
+
+  const handleFileCheck = (checked: CheckedState, file: FileItem) => {
+    setCheckedFiles((prev) => {
+      if (checked) {
+        return [...(prev ?? []), `uploads/${file.name}` || ""];
+      } else {
+        return prev?.filter((path) => path !== `uploads/${file.name}`);
+      }
+    });
+  };
+
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return "0 Bytes";
     const k = 1024;
@@ -177,7 +225,7 @@ export default function FilePage() {
   }, [data]);
 
   return (
-    <div className="relative isolate px-6 pt-5 lg:px-8 bg-gray-900 text-white w-full h-screen">
+    <div className="relative isolate px-6 pt-5 lg:px-8 bg-gray-900 text-white w-full min-h-screen">
       <div
         aria-hidden="true"
         className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80"
@@ -238,9 +286,28 @@ export default function FilePage() {
         {files.length > 0 && (
           <Card>
             <CardContent className="p-6">
+              <div className="flex flex-row gap-3">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  disabled={!checkedFiles?.length}
+                  onClick={handleBatchDownload}
+                >
+                  <Download className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  disabled={!checkedFiles?.length}
+                  onClick={handleBatchDelete}
+                >
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </Button>
+              </div>
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Select</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Size</TableHead>
                     <TableHead>Upload Date</TableHead>
@@ -251,6 +318,14 @@ export default function FilePage() {
                 <TableBody>
                   {files.map((file) => (
                     <TableRow key={file.id}>
+                      <TableCell className="min-w-9">
+                        <Checkbox
+                          id={file.id}
+                          onCheckedChange={(checked) =>
+                            handleFileCheck(checked, file)
+                          }
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2 text-white truncate max-w-48">
                           {file.preview ? (
